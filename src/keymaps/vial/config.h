@@ -20,7 +20,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #pragma once
 
-/* VIAL UID for Lily58*/
+/* VIAL UID for Allium58 */
 #define VIAL_KEYBOARD_UID {0x37, 0x37, 0x38, 0x31, 0x36, 0x64, 0x65, 0x38}
 
 /* VIAL secure unlock keystroke - currently both big keys (typ. SPACE/ENTER) */
