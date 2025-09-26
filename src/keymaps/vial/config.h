@@ -41,6 +41,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define TAPPING_TERM 100
 
 #define OLED_FONT_H "glcdfont_allium.c"
+#define SPLIT_TRANSACTION_IDS_USER USER_SYNC_A
 
 // Custom features
 
@@ -49,7 +50,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define SHOW_GUI_CTL_SWAP // Show operating system for current gui/ctrl swap (requires magic)
 #define TRACK_SESSION_KEYSTROKE_COUNT // Track the keystroke count for session
 
-#define SPLIT_BUILD // Indicate that each half will have it's own firmware (left with master left, right with master right)
 #define STATUS_LEFT // Force the status screen to always be the left screen
 //#define STATUS_RIGHT // Force the status screen to always be the right screen
 

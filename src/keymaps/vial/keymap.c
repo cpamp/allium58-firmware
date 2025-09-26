@@ -165,6 +165,9 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 
 #ifdef OLED_ENABLE
 
+#include "transactions.h"
+#include "oled_driver.h"
+
 #ifdef MASTER_RIGHT
 const bool master_left = false;
 #else
@@ -179,25 +182,47 @@ const bool status_left = true;
 const bool status_left = master_left;
 #endif
 
-#ifdef SPLIT_BUILD
-const bool split_build = true;
-#else
-const bool split_build = false;
-#endif
+typedef struct __attribute__((packed)) {
+  uint8_t layer;
+  uint16_t wpm;
+  bool caps_lock;
+  uint32_t keystrokes;
+  uint8_t max_wpm;
+  bool is_left;
+} oled_status_t;
+
+oled_status_t oled_status = {
+  .layer = _QWERTY,
+  .wpm = 0,
+  .caps_lock = false,
+  .keystrokes = 0,
+  .max_wpm = 0,
+  .is_left = false
+};
+
+bool oled_status_valid = false;
 
 bool is_left_side(void) {
-  const bool is_master = is_keyboard_master();
-  if (split_build) {
+  if (is_keyboard_master()) {
     return master_left;
   } else {
-    return is_master ? master_left : !master_left;
+    return oled_status.is_left;
   }
 }
 
-oled_rotation_t oled_init_user(oled_rotation_t rotation) {
-  if (!is_left_side())
-    return OLED_ROTATION_180;  // flips the display 180 degrees if offhand
-  return rotation;
+void user_sync_a_slave_handler(
+    uint8_t in_buflen, 
+    const void* in_data, 
+    uint8_t out_buflen, 
+    void* out_data
+) {
+  const oled_status_t *in_status = (const oled_status_t*)in_data;
+  oled_status = *in_status;
+  oled_status_valid = true;
+}
+
+void keyboard_post_init_user(void) {
+    transaction_register_rpc(USER_SYNC_A, user_sync_a_slave_handler);
 }
 
 layer_state_t layer_state_set_user(layer_state_t state) {
@@ -232,28 +257,41 @@ const char code_to_name[60] = {
     '#', ';', '\'', '`', ',', '.', '/', ' ', ' ', ' '};
 
 #ifdef TRACK_SESSION_KEYSTROKE_COUNT
-static uint32_t keystroke_count = 0;
 char keystroke_count_display[8];
 
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
   if (record->event.pressed) {
-    keystroke_count++;
+    oled_status.keystrokes++;
   }
   return true;
 }
 #endif // TRACK_SESSION_KEYSTROKE_COUNT
 
 #ifdef TRACK_WPM_MAX
-static uint8_t max_wpm = 0;
 char max_wpm_display[4];
 
 void matrix_scan_user(void) {
   uint8_t current_wpm = get_current_wpm();
-  if (current_wpm > max_wpm) {
-      max_wpm = current_wpm;
+  if (current_wpm > oled_status.max_wpm) {
+      oled_status.max_wpm = current_wpm;
   }
 }
 #endif // TRACK_WPM_MAX
+
+void housekeeping_task_user(void) {
+  static uint32_t last_sync = 0;
+  if (is_keyboard_master() && timer_elapsed32(last_sync) > 100) {
+    oled_status.layer = get_highest_layer(layer_state);
+    oled_status.wpm = get_current_wpm();
+    oled_status.caps_lock = host_keyboard_led_state().caps_lock;
+    oled_status.is_left = !is_left_side();
+
+    if (!transaction_rpc_send(USER_SYNC_A, sizeof(oled_status), &oled_status)) {
+      dprint("Slave send failed!\n");
+    }
+    last_sync = timer_read32();
+  }
+}
 
 #ifdef SHOW_GUI_CTL_SWAP
 void render_gui_swap(void) {
@@ -279,7 +317,7 @@ void render_gui_swap(void) {
 static void render_status(void) {
   oled_write_P(PSTR("layer "), false);
 
-  switch (get_highest_layer(layer_state)) {
+  switch (oled_status.layer) {
     case _QWERTY:
       oled_write_P(PSTR("QWERTY"), false);
       break;
@@ -293,19 +331,19 @@ static void render_status(void) {
       oled_write_P(PSTR("Adjust"), false);
       break;
     default:
-      sprintf(layer_misc, "MO(%01d) ", get_highest_layer(layer_state));
+      sprintf(layer_misc, "MO(%01d) ", oled_status.layer);
       oled_write(layer_misc, false);
       break;
   }
 
   oled_write_P(PSTR("  "), false);
-  sprintf(wpm, "%03d", get_current_wpm());
+  sprintf(wpm, "%03d", oled_status.wpm);
   oled_write(wpm, false);
   oled_write_P(PSTR(" wpm"), false);
 
 #ifdef SHOW_CAPS
   oled_set_cursor(17, 3);
-  if (host_keyboard_led_state().caps_lock) {
+  if (oled_status.caps_lock) {
     oled_write_P(PSTR("CAPS"), false);
   } else {
     oled_write_P(PSTR("    "), false);
@@ -314,14 +352,14 @@ static void render_status(void) {
 
 #ifdef TRACK_WPM_MAX
   oled_set_cursor(14, 1);
-  sprintf(max_wpm_display, "%03d", max_wpm);
+  sprintf(max_wpm_display, "%03d", oled_status.max_wpm);
   oled_write(max_wpm_display, false);
   oled_write_P(PSTR(" max"), false);
 #endif // TRACK_WPM_MAX
 
 #ifdef TRACK_SESSION_KEYSTROKE_COUNT
   oled_set_cursor(4, 3);
-  sprintf(keystroke_count_display, "%" PRIu32, keystroke_count);
+  sprintf(keystroke_count_display, "%" PRIu32, oled_status.keystrokes);
   oled_write(keystroke_count_display, false);
 #endif //TRACK_SESSION_KEYSTROKE_COUNT
 
@@ -331,15 +369,34 @@ static void render_status(void) {
 
 } // render_status
 
-bool oled_task_user(void) {
-  bool left = is_left_side();
-  bool status = (left && status_left) || (!left && !status_left);
+extern oled_rotation_t oled_rotation;
 
+void set_oled_rotation(oled_rotation_t rotation) {
+  oled_init(rotation);
+  oled_clear();
+}
+
+bool oled_task_user(void) {
+  static uint32_t last_frame = 0;
+  if (timer_elapsed32(last_frame) < 33) {
+    return false;
+  }
+  last_frame = timer_read32();
+
+  bool left = is_left_side();
+
+  oled_rotation_t desired = left ? OLED_ROTATION_0 : OLED_ROTATION_180;
+  if (desired != oled_rotation) {
+    set_oled_rotation(desired);
+  }
+
+  bool status = (left && status_left) || (!left && !status_left);
   if (status) {
     render_status();
   } else {
     render_logo();
   }
+  
   return false;
 }
 
