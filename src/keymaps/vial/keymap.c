@@ -304,7 +304,7 @@ static void render_status(void) {
   oled_write_P(PSTR(" wpm"), false);
 
 #ifdef SHOW_CAPS
-  oled_set_cursor(0, 1);
+  oled_set_cursor(17, 3);
   if (host_keyboard_led_state().caps_lock) {
     oled_write_P(PSTR("CAPS"), false);
   } else {
