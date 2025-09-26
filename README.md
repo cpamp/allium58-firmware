@@ -50,3 +50,18 @@ Enable with:
 ```c
 #define TRACK_SESSION_KEYSTROKE_COUNT
 ```
+
+### Status Side
+
+Force the status screen to either the left or the right. If building separate firmware (`MASTER_RIGHT` on right and `MASTER_LEFT` on left) be sure to include:
+
+```c
+#define SPLIT_BUILD
+```
+
+Enable with one of the following:
+
+```c
+#define STATUS_LEFT
+#define STATUS_RIGHT
+```

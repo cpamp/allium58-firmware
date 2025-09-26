@@ -16,6 +16,7 @@
 
 #include QMK_KEYBOARD_H
 #include <stdio.h>
+#include <stdbool.h>
 
 enum layer_number {
   _QWERTY = 0,
@@ -164,8 +165,37 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 
 #ifdef OLED_ENABLE
 
+#ifdef MASTER_RIGHT
+const bool master_left = false;
+#else
+const bool master_left = true;
+#endif
+
+#if defined(STATUS_RIGHT)
+const bool status_left = false;
+#elif defined(STATUS_LEFT)
+const bool status_left = true;
+#else
+const bool status_left = master_left;
+#endif
+
+#ifdef SPLIT_BUILD
+const bool split_build = true;
+#else
+const bool split_build = false;
+#endif
+
+bool is_left_side(void) {
+  const bool is_master = is_keyboard_master();
+  if (split_build) {
+    return master_left;
+  } else {
+    return is_master ? master_left : !master_left;
+  }
+}
+
 oled_rotation_t oled_init_user(oled_rotation_t rotation) {
-  if (!is_keyboard_master())
+  if (!is_left_side())
     return OLED_ROTATION_180;  // flips the display 180 degrees if offhand
   return rotation;
 }
@@ -302,7 +332,10 @@ static void render_status(void) {
 } // render_status
 
 bool oled_task_user(void) {
-  if (is_keyboard_master()) {
+  bool left = is_left_side();
+  bool status = (left && status_left) || (!left && !status_left);
+
+  if (status) {
     render_status();
   } else {
     render_logo();
